@@ -1,0 +1,13 @@
+# Local Python environments
+flappy_bird/
+.venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

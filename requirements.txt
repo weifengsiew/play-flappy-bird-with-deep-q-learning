@@ -1,0 +1,6 @@
+numpy
+gymnasium
+pillow
+torch
+jupyter
+matplotlib
