@@ -2,6 +2,8 @@
 
 Follow this repository to learn reinforcement learning from first principles. Start with simple tabular Q-learning, learn about the Flappy Bird environment, and finish by training a deep Q-network (DQN) to play Flappy Bird using image pixels. 
 
+Project: [Reinforcement Learning](https://github.com/weifengsiew/flappy-bird-deep-q-learning)
+
 ## Learning to Fly
 
 ### Before training
