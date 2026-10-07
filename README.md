@@ -31,21 +31,27 @@ Project: [Reinforcement Learning](https://github.com/weifengsiew/flappy-bird-dee
 Learn the reinforcement-learning loop—agents, environments, states, actions, rewards, returns, policies, value functions, Markov decision processes (MDPs), Bellman reasoning, exploration, and Q-learning updates—in a small hallway environment.
 
 - Hands-on notebook: [`01_tabular_q_learning/01_tabular_q_learning.ipynb`](01_tabular_q_learning/01_tabular_q_learning.ipynb)
-- Theoretical notes: [`01_tabular_q_learning/01_learning_notes.md`](01_tabular_q_learning/01_learning_notes.md)
+- Theory: [`01_tabular_q_learning/theory.md`](01_tabular_q_learning/theory.md)
+- Quiz questions: [`01_tabular_q_learning/quiz_questions.md`](01_tabular_q_learning/quiz_questions.md)
+- Quiz answers: [`01_tabular_q_learning/quiz_answers.md`](01_tabular_q_learning/quiz_answers.md)
 
 ### Stage 2 — Understanding visual and temporal data
 
 Use a lightweight Flappy Bird-style environment to understand video-like observations as sequences of image frames. Focus on how pixels encode visual information over time: transform each `84 × 84` RGB frame into a normalized `42 × 42` grayscale image and stack four consecutive frames so a neural network can infer motion and temporal context.
 
 - Hands-on notebook: [`02_intro_to_flappy_bird/02_intro_to_flappy_bird.ipynb`](02_intro_to_flappy_bird/02_intro_to_flappy_bird.ipynb)
-- Theoretical notes: [`02_intro_to_flappy_bird/02_learning_notes.md`](02_intro_to_flappy_bird/02_learning_notes.md)
+- Theory: [`02_intro_to_flappy_bird/theory.md`](02_intro_to_flappy_bird/theory.md)
+- Quiz questions: [`02_intro_to_flappy_bird/quiz_questions.md`](02_intro_to_flappy_bird/quiz_questions.md)
+- Quiz answers: [`02_intro_to_flappy_bird/quiz_answers.md`](02_intro_to_flappy_bird/quiz_answers.md)
 
 ### Stage 3 — Deep Q-learning 
 
 Replace the Q-table with a deep Q-network (DQN). Its convolutional neural network (CNN) reads the frame stack and estimates the Q-values of `do nothing` and `flap`.
 
 - Hands-on notebook: [`03_deep_q_learning/03_deep_q_learning.ipynb`](03_deep_q_learning/03_deep_q_learning.ipynb)
-- Theoretical notes: [`03_deep_q_learning/03_learning_notes.md`](03_deep_q_learning/03_learning_notes.md)
+- Theory: [`03_deep_q_learning/theory.md`](03_deep_q_learning/theory.md)
+- Quiz questions: [`03_deep_q_learning/quiz_questions.md`](03_deep_q_learning/quiz_questions.md)
+- Quiz answers: [`03_deep_q_learning/quiz_answers.md`](03_deep_q_learning/quiz_answers.md)
 - Training script: [`03_deep_q_learning/train_deep_q_network.py`](03_deep_q_learning/train_deep_q_network.py)
 - Training script guide: [`03_deep_q_learning/03_training_guide.md`](03_deep_q_learning/03_training_guide.md)
 

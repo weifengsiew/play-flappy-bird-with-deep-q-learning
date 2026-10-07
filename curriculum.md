@@ -21,7 +21,7 @@ Each stage uses:
 2. One numerical example for vectors, matrices, returns, or updates.
 3. One representative checkpoint question.
 4. One runnable experiment or notebook activity.
-5. Notes with the question immediately followed by its correct answer.
+5. Separate theory, quiz-question, and quiz-answer notes for each stage.
 
 ## Stage 1 — Foundations and tabular Q-learning
 
@@ -35,7 +35,9 @@ Learn the reinforcement-learning loop, value functions, Bellman reasoning, and Q
 - Python: 3.9.20
 - Kernel: `Python (reinforcement-learning)`
 - Notebook: `01_tabular_q_learning/01_tabular_q_learning.ipynb`
-- Notes: `01_tabular_q_learning/01_learning_notes.md`
+- Theory: `01_tabular_q_learning/theory.md`
+- Quiz questions: `01_tabular_q_learning/quiz_questions.md`
+- Quiz answers: `01_tabular_q_learning/quiz_answers.md`
 
 ### Concepts
 
@@ -63,7 +65,9 @@ Understand how video-like observations are represented as sequences of image fra
 
 - Environment: `02_intro_to_flappy_bird/flappy_bird_environment.py`
 - Notebook: `02_intro_to_flappy_bird/02_intro_to_flappy_bird.ipynb`
-- Notes: `02_intro_to_flappy_bird/02_learning_notes.md`
+- Theory: `02_intro_to_flappy_bird/theory.md`
+- Quiz questions: `02_intro_to_flappy_bird/quiz_questions.md`
+- Quiz answers: `02_intro_to_flappy_bird/quiz_answers.md`
 
 ### Environment interface
 
@@ -109,7 +113,9 @@ Replace the Q-table with a DQN whose CNN estimates two action values from a four
 
 - Notebook: `03_deep_q_learning/03_deep_q_learning.ipynb`
 - Training script: `03_deep_q_learning/train_deep_q_network.py`
-- Notes: `03_deep_q_learning/03_learning_notes.md`
+- Theory: `03_deep_q_learning/theory.md`
+- Quiz questions: `03_deep_q_learning/quiz_questions.md`
+- Quiz answers: `03_deep_q_learning/quiz_answers.md`
 - Guide: `03_deep_q_learning/03_training_guide.md`
 
 ### DQN loop
@@ -154,8 +160,8 @@ Study Double DQN, dueling networks, prioritized replay, reward shaping, partial 
 ## Deliverables
 
 - `curriculum.md`
-- `01_tabular_q_learning/01_tabular_q_learning.ipynb` and `01_tabular_q_learning/01_learning_notes.md`
-- `02_intro_to_flappy_bird/flappy_bird_environment.py`, `02_intro_to_flappy_bird/02_intro_to_flappy_bird.ipynb`, and `02_intro_to_flappy_bird/02_learning_notes.md`
-- `03_deep_q_learning/03_deep_q_learning.ipynb`, `03_deep_q_learning/train_deep_q_network.py`, `03_deep_q_learning/03_learning_notes.md`, and `03_deep_q_learning/03_training_guide.md`
+- `01_tabular_q_learning/01_tabular_q_learning.ipynb`, `01_tabular_q_learning/theory.md`, `01_tabular_q_learning/quiz_questions.md`, and `01_tabular_q_learning/quiz_answers.md`
+- `02_intro_to_flappy_bird/flappy_bird_environment.py`, `02_intro_to_flappy_bird/02_intro_to_flappy_bird.ipynb`, `02_intro_to_flappy_bird/theory.md`, `02_intro_to_flappy_bird/quiz_questions.md`, and `02_intro_to_flappy_bird/quiz_answers.md`
+- `03_deep_q_learning/03_deep_q_learning.ipynb`, `03_deep_q_learning/train_deep_q_network.py`, `03_deep_q_learning/theory.md`, `03_deep_q_learning/quiz_questions.md`, `03_deep_q_learning/quiz_answers.md`, and `03_deep_q_learning/03_training_guide.md`
 - `03_deep_q_learning/deep_q_network_checkpoint.pt` and `03_deep_q_learning/training_metrics.json`
 - Before-training and after-training gameplay GIFs in `03_deep_q_learning/assets/gifs/`.

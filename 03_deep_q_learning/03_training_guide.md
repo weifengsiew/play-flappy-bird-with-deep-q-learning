@@ -1,7 +1,5 @@
 # `train_deep_q_network.py`
 
-This guide explains the Stage 3 CNN-DQN training script using vocabulary from Stages 1, 2, and 3.
-
 The script trains an **agent** to interact with the Flappy Bird **environment**. At time step `t`, the agent receives a visual **state representation**, selects an **action**, receives a **reward**, and observes the next state:
 
 ~~~text
@@ -10,9 +8,9 @@ s_t → a_t → r_{t+1}, s_{t+1}
 
 One complete interaction sequence is an **episode**. It ends when the environment returns `terminated=True` or `truncated=True`.
 
-## 1. Stage 1–3 vocabulary in this script
+## 1. Reinforcement learning vocabulary
 
-| Curriculum term | Meaning in this script |
+| Terms | Relevance to this script |
 |---|---|
 | State, action, reward | The visual observation, `0 = do nothing` or `1 = flap`, and feedback from the environment. |
 | Transition / episode | `(state, action, reward, next_state, done)`; an episode ends at a terminal or truncated state. |
@@ -23,20 +21,21 @@ One complete interaction sequence is an **episode**. It ends when the environmen
 | Replay / target networks | Reuse random past transitions and use a delayed network for more stable targets. |
 | Evaluation | Measure the greedy policy with `ε=0` across repeated seeds and compare it with a random baseline. |
 
-Stage 1 used a Q-table. Stage 3 replaces that table with a CNN that approximates the Q-function from visual observations.
+## 2. Actions and state
 
-The Stage 1 distinction still applies: `V(s)` asks how good a state is, while `Q(s,a)` asks how good a particular action is in that state. The CNN outputs Q-values, and the policy chooses the action with the highest one.
-
-## 2. Actions and the visual state
-
-The environment has two actions:
-
+Two actions:
 ~~~python
 ACTION_COUNT = 2              # 0 = do nothing, 1 = flap
+~~~
+
+State:
+~~~python
 OBSERVATION_SHAPE = (4, 42, 42)
 ~~~
 
-The agent does not receive hidden coordinates such as the bird's position or velocity. It receives four consecutive processed frames so the observation contains information about motion. This is the Stage 2 visual-observation constraint: decisions must be based on pixels rather than privileged state information.
+State does not include hidden coordinates such as the bird's position or velocity. It receives four consecutive processed frames so the observation contains information about motion.
+
+## 3. Choosing best action and state using Q-values
 
 The CNN returns one Q-value for each action:
 
@@ -53,7 +52,7 @@ greedy action = flap
 
 The greedy policy chooses `flap` because `2.0 > 1.2`.
 
-## 3. Configuration
+## 4. Configuration
 
 The current script uses:
 
@@ -71,9 +70,9 @@ EVALUATION_SEEDS = range(200, 220)
 
 Epsilon decays from about `1.0` to `0.05` during the first `60,000` environment steps. Evaluation runs every `10,000` steps and can stop training early when the median score reaches `30` pipes. The Adam learning rate is `1e-3`; it controls how strongly each TD-error update changes the CNN weights.
 
-## 4. Preprocessing observations
+## 5. Preprocessing observations
 
-Stage 2 converts each rendered RGB frame into a normalized grayscale frame:
+Each rendered RGB frame is preprocessed into a normalized grayscale frame:
 
 ~~~python
 def preprocess(frame):
@@ -96,18 +95,28 @@ At the start of an episode, the first frame is repeated four times. Afterwards, 
 
 ## 5. CNN as a Q-function approximator
 
-`QNetwork` maps a visual observation to two action values. Convolution layers extract visual features; the linear head maps them to estimates of `Q(s,a)`.
+The CNN's job is to provide a differentiable function with parameters `θ` that maps a state to one Q-value per action:
+
+~~~text
+Q_θ(s, ·) = [Q_θ(s, do nothing), Q_θ(s, flap)]
+~~~
+
+The parameters `θ` include all convolution and linear-layer weights. Training changes `θ` so that these outputs become useful estimates of Q-values for each action. The network is not trained with a label saying which action is correct. Instead, the label is constructed from the reward and the estimated value of what happens next.
 
 ~~~python
 class QNetwork(nn.Module):
     def __init__(self):
         super().__init__()
+        # Extract spatial features from the four stacked grayscale frames.
         self.features = nn.Sequential(
+            # Four input frames become 16 learned feature maps.
             nn.Conv2d(4, 16, kernel_size=5, stride=2),
             nn.ReLU(),
+            # Combine low-level features into 32 higher-level feature maps.
             nn.Conv2d(16, 32, kernel_size=3, stride=2),
             nn.ReLU(),
         )
+        # Convert visual features into one Q-value for each action.
         self.head = nn.Sequential(
             nn.Flatten(),
             nn.Linear(32 * 9 * 9, 128),
@@ -116,6 +125,7 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, observations):
+        # Return Q(s, a) for every available action.
         return self.head(self.features(observations.float()))
 ~~~
 
@@ -131,11 +141,9 @@ The shape changes are:
 (N, 2) = [Q(s, do nothing), Q(s, flap)]
 ~~~
 
-Unlike a Q-table, the CNN learns weights and generalizes across visual observations.
-
 ## 6. Essential training loop
 
-The rest of the script is the Stage 1 Q-learning loop adapted to visual observations:
+The rest of the script is the Q-learning loop adapted to visual states:
 
 ~~~text
 observation s_t
@@ -153,73 +161,71 @@ A transition is stored as:
 Transition = namedtuple("Transition", "state action reward next_state done")
 ~~~
 
-Here `done` is true when `terminated or truncated` is true. A finished transition must not use a future Q-value.
+Here `done` is true when `terminated or truncated` is true. A finished transition must not use a future Q-value. The replay buffer breaks up the correlation between consecutive frames and lets the network reuse older transitions.
 
-The replay buffer breaks up the correlation between consecutive frames and lets the network reuse older transitions.
+## 7. How one experience updates the action values
 
-## 7. The DQN update
+This section shows how replayed experiences train the CNN: compute a target, compare it with the current Q-value, and update the policy network. Repeating this improves action selection.
 
-For each sampled transition, the policy network estimates the Q-value of the action actually taken. The target network estimates the best next-state Q-value:
+`QNetwork` is the CNN definition. The code creates two instances:
+
+~~~python
+policy_net = QNetwork()
+target_net = QNetwork()
+~~~
+
+- **Policy network (`policy_net`):** the trainable CNN used to choose actions from the current state; its weights are updated later using sampled past experiences from replay.
+- **Target network (`target_net`):** a delayed copy used only to calculate training targets.
+
+The timing is:
+
+~~~text
+current state → policy chooses action → store transition
+                later: replay samples transitions → update policy network
+~~~
+
+### Q-network: predict action values
+
+The CNN defined by `QNetwork` predicts the expected discounted future reward for each possible action.
+
+### Policy network: choose and learn
+
+`policy_net` is the trainable CNN. Its predictions help choose actions and provide the current Q-value for the loss. For a replay transition, the loss selects only the value for the action taken:
 
 ~~~python
 current_q = policy_net(states).gather(
     1, actions.unsqueeze(1)
 ).squeeze(1)
-
-with torch.no_grad():
-    next_q = target_net(next_states).max(dim=1).values
-    targets = rewards + 0.95 * next_q * (1.0 - done)
 ~~~
 
-This is the Stage 1 Q-learning target:
+If the sampled action is `flap`, `gather` selects `Q_θ(s_t, flap)`.
 
-~~~text
-target = r_{t+1} + γ max_a' Q_target(s_{t+1}, a')
-~~~
+### Target network: provide a stable target
 
-The script uses `γ=0.95`. When `done=1`, the target becomes only the final reward.
-
-The **TD error** is:
-
-~~~text
-TD error = target − current Q-value
-~~~
-
-The loss measures this error, and backpropagation updates the policy-network weights:
+`target_net` is a delayed copy of the policy network. Its next-state predictions provide the target; it is not updated by backpropagation:
 
 ~~~python
-loss = F.smooth_l1_loss(current_q, targets)
-optimizer.zero_grad()
-loss.backward()
-optimizer.step()
+with torch.no_grad():
+    next_q = target_net(next_states).max(dim=1).values
+targets = rewards + 0.95 * next_q * (1.0 - done)
 ~~~
 
-The target network is a delayed copy of the policy network. It is refreshed periodically so the TD target changes more slowly and learning is more stable.
-
-## 8. Training, return, and evaluation
-
-During training, `ε` gradually decreases, shifting behaviour from exploration to exploitation. The script records:
-
-- episode return: the accumulated reward for one episode;
-- episode length: how long the bird survives;
-- `pipes_passed`: how effectively the agent navigates obstacles;
-- loss: the current TD prediction error.
-
-The environment's reward is a learning signal: small alignment or survival rewards make the signal denser, passing a pipe gives positive feedback, and a collision gives negative feedback. The logged episode return is undiscounted:
+For a non-terminal transition, the target is:
 
 ~~~text
-G_t = r_{t+1} + r_{t+2} + r_{t+3} + …
+y_t = r_{t+1} + γ max_{a'} Q_target(s_{t+1}, a')
 ~~~
 
-Evaluation uses the greedy policy with `ε=0` across seeds `200` through `219`. Repeated evaluation scores are stronger evidence than one lucky episode.
-
-After training, the script saves:
+If `done=1`, the target is only the final reward:
 
 ~~~text
-deep_q_network_checkpoint.pt learned policy-network weights
-training_metrics.json        evaluation and before/after metrics
-assets/gifs/before_training.gif  random-policy baseline
-assets/gifs/after_training.gif   trained greedy-policy episode
+y_t = r_{t+1}
 ~~~
 
-The before-and-after recordings use the same environment seed and settings. The trained agent should achieve higher reward, pass more pipes, and survive longer across repeated evaluation episodes.
+The `max` forms the target; `argmax` later chooses the action with the highest estimated long-term return:
+
+~~~text
+argmax_a Q_θ(s, a)
+~~~
+
+This may not be the action with the highest immediate reward.
