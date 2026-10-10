@@ -6,6 +6,9 @@ import sys
 from collections import deque, namedtuple
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,15 +21,10 @@ sys.path.append(str(ROOT / "02_intro_to_flappy_bird"))
 from flappy_bird_environment import FlappyBirdEnv
 
 
-SEED = 7
-ACTION_COUNT = 2
-OBSERVATION_SHAPE = (4, 42, 42)
-TRAINING_STEPS = 800_000
-EPSILON_DECAY_STEPS = 60_000
-MIN_EPSILON = 0.05
-EVALUATION_INTERVAL = 10_000
-TARGET_MEDIAN_PIPES = 30
-EVALUATION_SEEDS = range(200, 220)
+CONFIG_PATH = Path(__file__).resolve().with_name("config.json")
+CONFIG = json.loads(CONFIG_PATH.read_text())
+SEED = CONFIG["seed"]
+ACTION_COUNT = CONFIG["action_count"]
 
 
 def preprocess(frame):
@@ -58,7 +56,7 @@ Transition = namedtuple("Transition", "state action reward next_state done")
 
 
 class ReplayBuffer:
-    def __init__(self, capacity=50_000):
+    def __init__(self, capacity):
         self.memory = deque(maxlen=capacity)
 
     def add(self, state, action, reward, next_state, done):
@@ -86,18 +84,20 @@ def choose_action(network, observation, epsilon):
     return int(values.argmax(dim=1).item())
 
 
-def optimize_step(policy_net, target_net, replay_buffer, optimizer, batch_size=64):
+def optimize_step(policy_net, target_net, replay_buffer, optimizer, batch_size):
     if len(replay_buffer) < batch_size:
         return None
     states, actions, rewards, next_states, done = replay_buffer.sample(batch_size)
     current_q = policy_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
     with torch.no_grad():
         next_q = target_net(next_states).max(dim=1).values
-        targets = rewards + 0.95 * next_q * (1.0 - done)
+        targets = rewards + CONFIG["discount_factor"] * next_q * (1.0 - done)
     loss = F.smooth_l1_loss(current_q, targets)
     optimizer.zero_grad()
     loss.backward()
-    torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 10.0)
+    torch.nn.utils.clip_grad_norm_(
+        policy_net.parameters(), CONFIG["gradient_clip_norm"]
+    )
     optimizer.step()
     return float(loss.item())
 
@@ -116,8 +116,14 @@ def run_episode(env, network=None, epsilon=0.0, train=False, replay=None, optimi
         next_observation = np.stack(next_history)
         if train:
             replay.add(observation, action, reward, next_observation, float(terminated or truncated))
-            if steps % 4 == 0:
-                loss = optimize_step(network, target_net, replay, optimizer)
+            if steps % CONFIG["optimize_every"] == 0:
+                loss = optimize_step(
+                    network,
+                    target_net,
+                    replay,
+                    optimizer,
+                    CONFIG["batch_size"],
+                )
                 if loss is not None:
                     losses.append(loss)
         history = next_history
@@ -154,9 +160,64 @@ def evaluate_policy(policy_net, seeds):
     return scores
 
 
-def save_gif(frames, path, fps=15):
+def save_gif(frames, path, fps):
     images = [Image.fromarray(frame) for frame in frames]
     images[0].save(path, save_all=True, append_images=images[1:], duration=int(1000 / fps), loop=0)
+
+
+def save_training_plot(training_history, evaluation_history, path):
+    if not training_history:
+        return
+    episodes = np.array([item["episode"] for item in training_history])
+    rewards = np.array([item["reward"] for item in training_history])
+    pipes = np.array([item["pipes"] for item in training_history])
+    window = min(CONFIG["rolling_window"], len(training_history))
+    rolling_kernel = np.ones(window) / window
+
+    figure, axes = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True)
+    axes[0].plot(episodes, rewards, alpha=0.2, color="tab:blue")
+    axes[0].plot(
+        episodes[window - 1:],
+        np.convolve(rewards, rolling_kernel, mode="valid"),
+        color="tab:blue",
+        label=f"{window}-episode rolling mean",
+    )
+    axes[0].set_ylabel("Episode reward")
+    axes[0].legend()
+
+    axes[1].plot(episodes, pipes, alpha=0.2, color="tab:green")
+    axes[1].plot(
+        episodes[window - 1:],
+        np.convolve(pipes, rolling_kernel, mode="valid"),
+        color="tab:green",
+        label=f"{window}-episode rolling mean",
+    )
+    axes[1].set_ylabel("Pipes passed")
+    axes[1].legend()
+
+    if evaluation_history:
+        evaluation_steps = [item["training_steps"] for item in evaluation_history]
+        evaluation_means = [item["mean_pipes"] for item in evaluation_history]
+        evaluation_medians = [item["median_pipes"] for item in evaluation_history]
+        axes[2].plot(evaluation_steps, evaluation_means, marker="o", label="Mean")
+        axes[2].plot(
+            evaluation_steps,
+            evaluation_medians,
+            marker="o",
+            label="Median",
+        )
+        axes[2].axhline(
+            CONFIG["target_median_pipes"],
+            linestyle="--",
+            color="tab:red",
+            label="Target median",
+        )
+        axes[2].legend()
+    axes[2].set_xlabel("Environment steps")
+    axes[2].set_ylabel("Evaluation pipes")
+    figure.suptitle("DQN training progress")
+    figure.savefig(path, dpi=150)
+    plt.close(figure)
 
 
 def main():
@@ -168,18 +229,25 @@ def main():
 
     output_dir = Path(__file__).resolve().parent
     gif_dir = output_dir / "assets" / "gifs"
+    plot_dir = output_dir / "assets" / "plots"
     gif_dir.mkdir(parents=True, exist_ok=True)
+    plot_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = output_dir / "deep_q_network_checkpoint.pt"
     metrics_path = output_dir / "training_metrics.json"
+    training_plot = plot_dir / "training_progress.png"
 
     policy_net = QNetwork()
     target_net = QNetwork()
     target_net.load_state_dict(policy_net.state_dict())
-    optimizer = torch.optim.Adam(policy_net.parameters(), lr=1e-3)
-    replay = ReplayBuffer()
+    optimizer = torch.optim.Adam(
+        policy_net.parameters(), lr=CONFIG["learning_rate"]
+    )
+    replay = ReplayBuffer(CONFIG["replay_capacity"])
 
     steps_seen = 0
     episode = 0
+    training_history = []
+    evaluation_history = []
     if checkpoint.exists():
         policy_net.load_state_dict(torch.load(checkpoint, map_location="cpu"))
         target_net.load_state_dict(policy_net.state_dict())
@@ -187,15 +255,20 @@ def main():
             previous_metrics = json.loads(metrics_path.read_text())
             steps_seen = int(previous_metrics.get("training_steps", 0))
             episode = int(previous_metrics.get("episodes", 0))
+            training_history = previous_metrics.get("training_history", [])
+            evaluation_history = previous_metrics.get("evaluation_history", [])
         print(f"resuming from episode={episode} steps={steps_seen}", flush=True)
 
     recent_scores = deque(maxlen=50)
-    next_evaluation_steps = steps_seen + EVALUATION_INTERVAL
-    while steps_seen < TRAINING_STEPS:
+    next_evaluation_steps = steps_seen + CONFIG["evaluation_interval"]
+    while steps_seen < CONFIG["training_steps"]:
         episode += 1
         epsilon = max(
-            MIN_EPSILON,
-            1.0 - (1.0 - MIN_EPSILON) * steps_seen / EPSILON_DECAY_STEPS,
+            CONFIG["min_epsilon"],
+            1.0
+            - (1.0 - CONFIG["min_epsilon"])
+            * steps_seen
+            / CONFIG["epsilon_decay_steps"],
         )
         env = FlappyBirdEnv(seed=SEED + episode)
         reward, pipes, steps, losses = run_episode(
@@ -204,9 +277,20 @@ def main():
         env.close()
         steps_seen += steps
         recent_scores.append(pipes)
-        if steps_seen % 1_000 < steps:
+        training_history.append(
+            {
+                "episode": episode,
+                "training_steps": steps_seen,
+                "reward": float(reward),
+                "pipes": int(pipes),
+                "episode_length": int(steps),
+                "epsilon": float(epsilon),
+                "loss": float(np.mean(losses)) if losses else None,
+            }
+        )
+        if steps_seen % CONFIG["target_update_interval"] < steps:
             target_net.load_state_dict(policy_net.state_dict())
-        if episode % 100 == 0:
+        if episode % CONFIG["log_interval_episodes"] == 0:
             print(
                 f"episode={episode:5d} steps={steps_seen:7d} epsilon={epsilon:.3f} "
                 f"recent_pipes={np.mean(recent_scores):.2f} "
@@ -214,22 +298,32 @@ def main():
                 flush=True,
             )
         if steps_seen >= next_evaluation_steps:
-            evaluation_scores = evaluate_policy(policy_net, EVALUATION_SEEDS)
+            evaluation_scores = evaluate_policy(
+                policy_net, CONFIG["evaluation_seeds"]
+            )
             evaluation_median = float(np.median(evaluation_scores))
+            evaluation_history.append(
+                {
+                    "training_steps": steps_seen,
+                    "mean_pipes": float(np.mean(evaluation_scores)),
+                    "median_pipes": evaluation_median,
+                    "scores": evaluation_scores,
+                }
+            )
             print(
                 f"evaluation steps={steps_seen} "
                 f"mean_pipes={np.mean(evaluation_scores):.2f} "
                 f"median_pipes={evaluation_median:.2f}",
                 flush=True,
             )
-            if evaluation_median >= TARGET_MEDIAN_PIPES:
+            if evaluation_median >= CONFIG["target_median_pipes"]:
                 print(
                     f"target reached: median_pipes={evaluation_median:.2f} "
-                    f">= {TARGET_MEDIAN_PIPES}",
+                    f">= {CONFIG['target_median_pipes']}",
                     flush=True,
                 )
                 break
-            next_evaluation_steps += EVALUATION_INTERVAL
+            next_evaluation_steps += CONFIG["evaluation_interval"]
 
     torch.save(policy_net.state_dict(), checkpoint)
 
@@ -239,17 +333,33 @@ def main():
     def trained_selector(observation):
         return choose_action(policy_net, observation, epsilon=0.0)
 
-    before_frames, before_reward = record_episode(FlappyBirdEnv(seed=101), random_selector)
-    after_frames, after_reward = record_episode(FlappyBirdEnv(seed=101), trained_selector)
-    save_gif(before_frames, gif_dir / "before_training.gif")
-    save_gif(after_frames, gif_dir / "after_training.gif")
+    before_frames, before_reward = record_episode(
+        FlappyBirdEnv(seed=CONFIG["comparison_seed"]), random_selector
+    )
+    after_frames, after_reward = record_episode(
+        FlappyBirdEnv(seed=CONFIG["comparison_seed"]), trained_selector
+    )
+    save_gif(before_frames, gif_dir / "before_training.gif", CONFIG["gif_fps"])
+    save_gif(after_frames, gif_dir / "after_training.gif", CONFIG["gif_fps"])
 
-    scores = evaluate_policy(policy_net, EVALUATION_SEEDS)
+    scores = evaluate_policy(policy_net, CONFIG["evaluation_seeds"])
+    if not evaluation_history or evaluation_history[-1]["training_steps"] != steps_seen:
+        evaluation_history.append(
+            {
+                "training_steps": steps_seen,
+                "mean_pipes": float(np.mean(scores)),
+                "median_pipes": float(np.median(scores)),
+                "scores": scores,
+            }
+        )
 
     metrics = {
+        "config": CONFIG,
         "training_steps": steps_seen,
         "episodes": episode,
-        "evaluation_seeds": list(EVALUATION_SEEDS),
+        "training_history": training_history,
+        "evaluation_history": evaluation_history,
+        "evaluation_seeds": CONFIG["evaluation_seeds"],
         "evaluation_pipes_mean": float(np.mean(scores)),
         "evaluation_pipes_median": float(np.median(scores)),
         "evaluation_pipes": scores,
@@ -257,6 +367,7 @@ def main():
         "after_reward": after_reward,
     }
     (output_dir / "training_metrics.json").write_text(json.dumps(metrics, indent=2))
+    save_training_plot(training_history, evaluation_history, training_plot)
     print(f"saved checkpoint: {checkpoint}")
     print(f"evaluation mean pipes: {metrics['evaluation_pipes_mean']:.2f}")
     print(f"evaluation median pipes: {metrics['evaluation_pipes_median']:.2f}")

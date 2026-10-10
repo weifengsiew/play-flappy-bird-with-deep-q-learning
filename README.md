@@ -53,7 +53,18 @@ Replace the Q-table with a deep Q-network (DQN). Its convolutional neural networ
 - Quiz questions: [`03_deep_q_learning/quiz_questions.md`](03_deep_q_learning/quiz_questions.md)
 - Quiz answers: [`03_deep_q_learning/quiz_answers.md`](03_deep_q_learning/quiz_answers.md)
 - Training script: [`03_deep_q_learning/train_deep_q_network.py`](03_deep_q_learning/train_deep_q_network.py)
+- Training configuration: [`03_deep_q_learning/config.json`](03_deep_q_learning/config.json)
 - Training script guide: [`03_deep_q_learning/03_training_guide.md`](03_deep_q_learning/03_training_guide.md)
+
+### Stage 4 — Refactoring the DQN code
+
+Clean up the Stage 3 training script so it is easier to understand without changing how the agent behaves.
+
+- Split large functions into smaller ones.
+- Rename unclear variables.
+- Add comments explaining the training loop.
+- Remove duplicated code.
+- Compare the refactored results with Stage 3.
 
 ## Quick start
 
@@ -71,4 +82,4 @@ Then work through the notebooks in order. To run the final training script from 
 python 03_deep_q_learning/train_deep_q_network.py
 ```
 
-The script evaluates the policy repeatedly, saves `deep_q_network_checkpoint.pt` and `training_metrics.json`, and writes the comparison GIFs to `03_deep_q_learning/assets/gifs/`.
+The script reads its hyperparameters from `03_deep_q_learning/config.json`, evaluates the policy repeatedly, and saves `deep_q_network_checkpoint.pt` and `training_metrics.json`. The metrics file contains per-episode history and evaluation checkpoints; the script also writes `assets/plots/training_progress.png` and the comparison GIFs to `assets/gifs/`.

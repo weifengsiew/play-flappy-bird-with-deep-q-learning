@@ -54,23 +54,40 @@ The greedy policy chooses `flap` because `2.0 > 1.2`.
 
 ## 4. Configuration
 
-The current script uses:
+Training parameters are stored in [`config.json`](config.json), so experiments can change settings without editing the training code. The most important parameters are:
 
-~~~python
-SEED = 7
-ACTION_COUNT = 2
-OBSERVATION_SHAPE = (4, 42, 42)
-TRAINING_STEPS = 800_000
-EPSILON_DECAY_STEPS = 60_000
-MIN_EPSILON = 0.05
-EVALUATION_INTERVAL = 10_000
-TARGET_MEDIAN_PIPES = 30
-EVALUATION_SEEDS = range(200, 220)
-~~~
+| Parameter | Default | Purpose |
+|---|---:|---|
+| `training_steps` | `800000` | Maximum number of environment steps. |
+| `learning_rate` | `0.001` | Size of each Adam optimizer update. |
+| `discount_factor` | `0.95` | Weight given to future rewards. |
+| `batch_size` | `64` | Number of replay transitions per update. |
+| `replay_capacity` | `50000` | Maximum number of stored transitions. |
+| `epsilon_decay_steps` | `60000` | Steps over which exploration decreases. |
+| `min_epsilon` | `0.05` | Minimum probability of a random action. |
+| `evaluation_interval` | `10000` | Steps between greedy evaluations. |
+| `target_median_pipes` | `30` | Early-stopping evaluation target. |
 
-Epsilon decays from about `1.0` to `0.05` during the first `60,000` environment steps. Evaluation runs every `10,000` steps and can stop training early when the median score reaches `30` pipes. The Adam learning rate is `1e-3`; it controls how strongly each TD-error update changes the CNN weights.
+Epsilon decays from about `1.0` to `0.05` during the first `60,000` environment steps. Evaluation runs every `10,000` steps and can stop training early when the median score reaches `30` pipes.
 
-## 5. Preprocessing observations
+## 5. Tracking performance across episodes
+
+After each episode, the script records the episode number, environment steps, reward, pipes passed, episode length, epsilon, and mean training loss. At each evaluation checkpoint it records the mean and median number of pipes across the fixed evaluation seeds.
+
+These records are saved in `training_metrics.json`:
+
+- `training_history` contains noisy per-episode training results.
+- `evaluation_history` contains greedy-policy results at regular environment-step checkpoints.
+
+The script also writes `assets/plots/training_progress.png`, which shows:
+
+1. Episode reward and its rolling mean.
+2. Pipes passed and its rolling mean.
+3. Evaluation mean and median pipes against environment steps.
+
+The rolling mean uses the `rolling_window` value from `config.json` and makes the overall learning trend easier to see than individual episodes alone.
+
+## 6. Preprocessing observations
 
 Each rendered RGB frame is preprocessed into a normalized grayscale frame:
 
@@ -93,7 +110,7 @@ At the start of an episode, the first frame is repeated four times. Afterwards, 
 [A, B, C, D] → [B, C, D, E]
 ~~~
 
-## 5. CNN as a Q-function approximator
+## 7. CNN as a Q-function approximator
 
 The CNN's job is to provide a differentiable function with parameters `θ` that maps a state to one Q-value per action:
 
@@ -141,7 +158,7 @@ The shape changes are:
 (N, 2) = [Q(s, do nothing), Q(s, flap)]
 ~~~
 
-## 6. Essential training loop
+## 8. Essential training loop
 
 The rest of the script is the Q-learning loop adapted to visual states:
 
@@ -163,7 +180,7 @@ Transition = namedtuple("Transition", "state action reward next_state done")
 
 Here `done` is true when `terminated or truncated` is true. A finished transition must not use a future Q-value. The replay buffer breaks up the correlation between consecutive frames and lets the network reuse older transitions.
 
-## 7. How one experience updates the action values
+## 9. How one experience updates the action values
 
 This section shows how replayed experiences train the CNN: compute a target, compare it with the current Q-value, and update the policy network. Repeating this improves action selection.
 
