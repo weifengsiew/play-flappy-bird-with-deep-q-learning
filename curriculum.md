@@ -153,6 +153,25 @@ The script writes the checkpoint to `deep_q_network_checkpoint.pt`, evaluation d
 
 The trained agent survives longer and passes more pipes than the random baseline across repeated seeds, and both gameplay recordings are saved.
 
+## Stage 4 — Refactoring the DQN code
+
+### Objective
+
+Clean up the Stage 3 training script so it is easier to understand without changing how the agent behaves.
+
+### Refactoring tasks
+
+- Split large functions into smaller ones.
+- Rename unclear variables.
+- Add comments explaining the training loop.
+- Remove duplicated code.
+- Keep the agent's behavior unchanged.
+- Run the refactored code and compare its results with Stage 3.
+
+### Pass criteria
+
+The refactored code runs successfully, produces comparable evaluation results to Stage 3, and the learner can explain the main steps of the DQN training loop.
+
 ## After the core goal
 
 Study Double DQN, dueling networks, prioritized replay, reward shaping, partial observability, and recurrent DQN.
